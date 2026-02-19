@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, count, sum as spark_sum
+from pyspark.sql.functions import col, when, count, sum as spark_sum, lit
 
 # criando a sessão do Spark
 def create_spark_session():
@@ -14,16 +14,30 @@ def main():
     # leitura da silver 
     df = spark.read.parquet("data_lake/silver/transactions")
 
-    # regra simples de fraude
-
+    # Score components
     df_gold = df.withColumn(
+        "amount_risk",
+        when(col("amount") > 3000, 0.4).otherwise(0.0)
+    ).withColumn(
+        "international_risk",
+        when(col("is_international") == True, 0.3).otherwise(0.0)
+    ).withColumn(
+        "category_risk",
+        when(col("merchant_category") == "electronics", 0.2).otherwise(0.0)
+    )
+    
+    # Somar score
+    df_gold = df_gold.withColumn(
+        "fraud_score",
+        col("amount_risk") +
+        col("international_risk") +
+        col("category_risk")
+    )
+    
+    # Definir flag final
+    df_gold = df_gold.withColumn(
         "fraud_flag",
-        when(
-            (col("amount") > 3000) &
-            (col("is_international") == True) &
-            (col("merchant_category") == "electronics"),
-            1
-        ).otherwise(0)
+        when(col("fraud_score") >= 0.7, 1).otherwise(0)
     )
 
     # metricas feitas por cliente
