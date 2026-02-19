@@ -1,0 +1,6 @@
+2026-02-19 15:29:27,272 - INFO - Starting the data pipeline
+2026-02-19 15:29:27,272 - INFO - Running step: bronze_to_silver.py
+2026-02-19 15:29:37,670 - INFO - bronze_to_silver.py completed successfully
+2026-02-19 15:29:37,670 - INFO - Running step: silver_to_gold.py
+2026-02-19 15:29:47,880 - INFO - silver_to_gold.py completed successfully
+2026-02-19 15:29:47,880 - INFO - Pipeline completed successfully
