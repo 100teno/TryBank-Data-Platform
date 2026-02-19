@@ -165,3 +165,9 @@ Planned enhancements include:
 This project serves as a portfolio-grade demonstration of modern data engineering architecture in a fintech-inspired scenario.
 
 It reflects real-world patterns such as layered data lakes, feature engineering, batch processing, and API-based ingestion.
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![PySpark](https://img.shields.io/badge/PySpark-Batch%20Processing-FDEE21?logo=apachespark&logoColor=black)
+![FastAPI](https://img.shields.io/badge/FastAPI-Async%20API-009688?logo=fastapi&logoColor=white)
+![Data Lake](https://img.shields.io/badge/Data%20Architecture-Medallion-6A5ACD)
+![Status](https://img.shields.io/badge/Project-Active-2ECC71)
