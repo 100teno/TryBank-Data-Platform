@@ -6,7 +6,7 @@ import json
 import os
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, abs as spark_abs, lit
+from pyspark.sql.functions import col
 from pyspark.ml.classification import LogisticRegressionModel
 from pyspark.ml.feature import VectorAssembler
 
@@ -33,8 +33,6 @@ assembler = VectorAssembler(
     outputCol="features"
 )
 
-
-
 # Request Schema
 
 class Transaction(BaseModel):
@@ -49,6 +47,7 @@ class Transaction(BaseModel):
     is_international: bool
 
 # Ingestion Endpoint (Bronze)
+
 
 @app.post("/transactions")
 def create_transaction(transaction: Transaction):
@@ -66,39 +65,93 @@ def create_transaction(transaction: Transaction):
 
 # Prediction Endpoint (ML)
 
+
 @app.post("/predict")
 def predict(transaction: Transaction):
 
-    # Converter request para dict
     record = transaction.dict()
 
-    # Criar DataFrame Spark
-    df = spark.createDataFrame([record])
+    gold_df = spark.read.parquet("data_lake/gold/customer_metrics")
 
-    # Simular histórico básico
-    # (produção real buscaria no Gold layer)
-
-    df = df.withColumn("customer_avg_amount", lit(500.0))
-    df = df.withColumn("customer_total_transactions", lit(10))
-    df = df.withColumn("international_ratio", lit(0.1))
-
-    df = df.withColumn(
-        "amount_deviation_from_avg",
-        spark_abs(col("amount") - col("customer_avg_amount"))
+    customer_data = gold_df.filter(
+        col("customer_id") == record["customer_id"]
     )
 
-    # Feature Vector
+    # Cliente com histórico
 
+    if customer_data.count() > 0:
+
+        row = customer_data.collect()[0]
+
+        customer_total_transactions = int(row["total_transactions"])
+        total_amount = float(row["total_amount"])
+
+        customer_avg_amount = (
+            total_amount / customer_total_transactions
+            if customer_total_transactions > 0 else 0.0
+        )
+
+        international_ratio = 0.0
+
+    # Cold Start com média global
+
+    else:
+
+        global_agg = gold_df.agg(
+            {"total_amount": "sum", "total_transactions": "sum"}
+        ).collect()[0]
+
+        global_total_amount = float(global_agg["sum(total_amount)"])
+        global_total_transactions = float(global_agg["sum(total_transactions)"])
+
+        customer_avg_amount = (
+            global_total_amount / global_total_transactions
+            if global_total_transactions > 0 else 0.0
+        )
+
+        customer_total_transactions = 0
+        international_ratio = 0.0
+
+    # Feature Engineering
+
+    amount_deviation_from_avg = abs(
+        record["amount"] - customer_avg_amount
+    )
+
+    feature_data = [{
+        "amount": record["amount"],
+        "customer_avg_amount": customer_avg_amount,
+        "amount_deviation_from_avg": amount_deviation_from_avg,
+        "international_ratio": international_ratio,
+        "customer_total_transactions": customer_total_transactions
+    }]
+
+    df = spark.createDataFrame(feature_data)
     df = assembler.transform(df)
-
-
-    # Prediction
 
     prediction = model.transform(df)
 
     result = prediction.select("probability", "prediction").collect()[0]
 
+    fraud_probability = float(result["probability"][1])
+    fraud_prediction = int(result["prediction"])
+
+    # Save Prediction (Monitoring)
+
+    os.makedirs("data_lake/predictions", exist_ok=True)
+
+    prediction_record = {
+        "customer_id": record["customer_id"],
+        "amount": record["amount"],
+        "fraud_probability": fraud_probability,
+        "fraud_prediction": fraud_prediction,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    with open("data_lake/predictions/predictions.json", "a") as f:
+        f.write(json.dumps(prediction_record) + "\n")
+
     return {
-        "fraud_probability": float(result["probability"][1]),
-        "fraud_prediction": int(result["prediction"])
+        "fraud_probability": fraud_probability,
+        "fraud_prediction": fraud_prediction
     }
