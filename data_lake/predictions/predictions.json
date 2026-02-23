@@ -1,0 +1,4 @@
+{"customer_id": "f9e4a96b-ca85-4571-9a28-d1846665af03afasffs222", "amount": 100000.0, "fraud_probability": 0.9999999997322118, "fraud_prediction": 1, "timestamp": "2026-02-23T19:08:32.728999"}
+{"customer_id": "f9e4a96b-ca85-4571-9a28-d1846665af03afasffs2", "amount": 15000.0, "fraud_probability": 0.7778210421922079, "fraud_prediction": 1, "timestamp": "2026-02-23T19:10:16.590099"}
+{"customer_id": "f9e4a96b-ca85-4571-9a28-d1846665af03afasffs241411", "amount": 5000.0, "fraud_probability": 0.23279218676266078, "fraud_prediction": 0, "timestamp": "2026-02-23T19:11:03.918999"}
+{"customer_id": "f9e4a96b-ca85-4571-9a28-d1846665af03afasffs2414", "amount": 2000.0, "fraud_probability": 0.12716078979524015, "fraud_prediction": 0, "timestamp": "2026-02-23T19:11:42.346518"}
