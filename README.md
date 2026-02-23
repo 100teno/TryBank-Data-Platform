@@ -2,11 +2,13 @@
 
 ## Overview
 
-TryBank Data Platform is an end-to-end data engineering project that simulates the core data architecture of a digital banking system.
+TryBank Data Platform is an end-to-end data engineering and machine learning project that simulates the core data architecture of a digital banking system with fraud detection capabilities.
 
-The platform demonstrates how transaction data can be ingested, processed, enriched with fraud risk logic, and structured using a layered Data Lake architecture. It combines API ingestion, batch processing with Spark, and risk scoring logic to simulate a realistic fintech data workflow.
+The platform demonstrates how transaction data can be ingested, processed, enriched with behavioral features, and used to train a supervised fraud detection model using a layered Data Lake architecture.
 
-This project was designed to showcase practical data engineering concepts in a production-inspired environment.
+It combines API ingestion, batch processing with Spark, feature engineering, machine learning training, and real-time inference to simulate a realistic fintech data workflow.
+
+This project was designed to showcase production-inspired data engineering and ML concepts in an integrated environment.
 
 ---
 
@@ -16,14 +18,19 @@ The platform follows a **Medallion Architecture** pattern:
 
 - **Bronze Layer** — Raw transaction data (JSON, append-only)
 - **Silver Layer** — Cleaned, typed, and structured data (Parquet)
-- **Gold Layer** — Aggregated metrics and fraud risk scoring
+- **Gold Layer** — Aggregated behavioral features for fraud modeling
+- **Model Layer** — Supervised ML training and evaluation
+- **API Layer** — Real-time fraud probability inference
 
 ### Data Flow
 
-1. Transactions are generated via simulator or sent through an API.
+1. Transactions are generated via simulator or sent through the API.
 2. Data is appended to the Bronze layer in JSON format.
 3. Spark processes Bronze data into structured Silver tables.
-4. Gold layer applies fraud scoring and generates customer-level metrics.
+4. Gold layer computes customer-level behavioral features.
+5. A supervised Logistic Regression model is trained using Spark MLlib.
+6. The trained model is persisted locally.
+7. The API loads the model and performs real-time fraud inference.
 
 ---
 
@@ -33,22 +40,28 @@ The platform follows a **Medallion Architecture** pattern:
 trybank-data-platform/
 │
 ├── api/
-│   └── main.py                  # FastAPI ingestion service
+│   └── main.py                     # FastAPI ingestion and prediction service
 │
 ├── simulator/
-│   └── generator.py             # Synthetic transaction generator
+│   └── generator.py                # Synthetic transaction generator
 │
 ├── jobs/
-│   ├── bronze_to_silver.py      # Spark job: JSON → Parquet
-│   └── silver_to_gold.py        # Spark job: Risk scoring & aggregations
+│   ├── bronze_to_silver.py         # Spark job: JSON → Parquet
+│   ├── silver_to_gold.py           # Spark job: Feature engineering
+│   └── train_model.py              # ML training pipeline (Spark MLlib)
+│
+├── pipeline.py                     # Orchestration script
 │
 ├── data_lake/
-│   ├── bronze/                  # Raw transaction data (JSON)
-│   ├── silver/                  # Cleaned structured data (Parquet)
-│   └── gold/                    # Enriched datasets and metrics
+│   ├── bronze/                     # Raw transaction data (JSON)
+│   ├── silver/                     # Cleaned structured data (Parquet)
+│   ├── gold/                       # Behavioral feature datasets
+│   └── predictions/                # Prediction logs (future improvement)
 │
-├── models/                      # Reserved for ML fraud models (future)
-├── docs/                        # Architecture documentation
+├── models/
+│   └── fraud_model/                # Persisted Spark ML model
+│
+├── docs/                           # Architecture documentation
 │
 ├── requirements.txt
 └── README.md
@@ -58,38 +71,40 @@ trybank-data-platform/
 
 ## Technology Stack
 
-- Python 3
-- PySpark
-- FastAPI
-- Uvicorn
-- Faker
-- Parquet
-- Git
+- Python 3  
+- PySpark (Batch processing & MLlib)  
+- FastAPI  
+- Uvicorn  
+- Faker  
+- Parquet  
+- Git  
 - Linux (WSL environment)
 
-
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
-![PySpark](https://img.shields.io/badge/PySpark-Batch%20Processing-FDEE21?logo=apachespark&logoColor=black)
-![FastAPI](https://img.shields.io/badge/FastAPI-Async%20API-009688?logo=fastapi&logoColor=white)
+![PySpark](https://img.shields.io/badge/PySpark-MLlib-FDEE21?logo=apachespark&logoColor=black)
+![FastAPI](https://img.shields.io/badge/FastAPI-Inference%20API-009688?logo=fastapi&logoColor=white)
 ![Data Lake](https://img.shields.io/badge/Data%20Architecture-Medallion-6A5ACD)
 ![Status](https://img.shields.io/badge/Project-Active-2ECC71)
 
-
 ---
 
-## Fraud Risk Scoring
+## Fraud Detection Model
 
-The Gold layer implements a rule-based fraud scoring system.
+The Gold layer generates behavioral features used to train a supervised Logistic Regression model.
 
-Each transaction receives a `fraud_score` between `0.0` and `1.0` based on risk signals such as:
+Engineered features include:
 
-- High transaction amount
-- International transaction
-- High-risk merchant category
+- Transaction amount
+- Customer average transaction amount
+- Deviation from historical average
+- International transaction ratio
+- Total customer transaction volume
 
-Transactions exceeding a defined threshold are flagged as potential fraud.
+The model is evaluated using a Train/Test split and ROC AUC metric.
 
-The design is modular and can evolve into a supervised machine learning model in future versions.
+Current AUC: ~0.76 (realistic evaluation without data leakage).
+
+The trained model is saved and loaded by the API for real-time fraud probability inference.
 
 ---
 
@@ -109,19 +124,21 @@ pip install -r requirements.txt
 python simulator/generator.py
 ```
 
-### 3. Process Bronze → Silver
+### 3. Run Data Pipeline
+
+```bash
+python pipeline.py
+```
+
+Or run jobs individually:
 
 ```bash
 python jobs/bronze_to_silver.py
-```
-
-### 4. Process Silver → Gold
-
-```bash
 python jobs/silver_to_gold.py
+python jobs/train_model.py
 ```
 
-### 5. Run the Ingestion API
+### 4. Run the API
 
 ```bash
 uvicorn api.main:app --reload
@@ -145,12 +162,12 @@ http://127.0.0.1:8000/docs
 ### Silver Layer
 - Structured and typed
 - Converted to Parquet format
-- Ready for analytics and transformation
+- Cleaned and ready for transformations
 
 ### Gold Layer
-- Fraud scoring applied
+- Behavioral feature engineering applied
 - Customer-level aggregations generated
-- Optimized for BI or ML consumption
+- Optimized for machine learning consumption
 
 ---
 
@@ -158,18 +175,18 @@ http://127.0.0.1:8000/docs
 
 Planned enhancements include:
 
-- Structured Streaming ingestion
-- Machine learning fraud model
-- Orchestration layer
+- Real-time feature lookup inside the API
+- Prediction logging layer
+- Model monitoring metrics
 - Docker containerization
 - CI/CD integration
-- Monitoring and observability
 - Data validation layer
+- Drift detection
 
 ---
 
 ## Purpose
 
-This project serves as a portfolio-grade demonstration of modern data engineering architecture in a fintech-inspired scenario.
+This project serves as a portfolio-grade demonstration of modern data engineering and machine learning architecture in a fintech-inspired scenario.
 
-It reflects real-world patterns such as layered data lakes, feature engineering, batch processing, and API-based ingestion.
+It reflects real-world patterns such as layered data lakes, behavioral feature engineering, supervised model training, batch processing, and API-based inference deployment.
