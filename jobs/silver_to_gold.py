@@ -5,13 +5,13 @@ from pyspark.sql.functions import (
     count,
     sum as spark_sum,
     avg,
-    abs as spark_abs
+    abs as spark_abs,
+    rand
 )
 
 
-# -----------------------------
 # Spark Session
-# -----------------------------
+
 def create_spark_session():
     return (
         SparkSession.builder
@@ -25,12 +25,12 @@ def create_spark_session():
 def main():
     spark = create_spark_session()
 
-    # 1. Read Silver Layer
+    # Read Silver Layer
 
     df_silver = spark.read.parquet("data_lake/silver/transactions")
 
 
-    # 2. Customer Aggregated Features
+    # Customer Aggregated Features
 
     customer_stats = (
         df_silver
@@ -51,7 +51,7 @@ def main():
         how="left"
     )
 
-    # 3. Behavioral Features
+    # Behavioral Features
 
     df_features = df_features.withColumn(
         "amount_deviation_from_avg",
@@ -67,13 +67,13 @@ def main():
         ).otherwise(0.0)
     )
 
-    # 4. Risk Components
+    # Risk Components (mantidos, mas agora usados para probabilidade)
 
     df_gold = (
         df_features
         .withColumn(
             "amount_risk",
-            when(col("amount") > 3000, 0.4).otherwise(0.0)
+            when(col("amount") > 3000, 0.3).otherwise(0.0)
         )
         .withColumn(
             "international_risk",
@@ -85,26 +85,28 @@ def main():
         )
         .withColumn(
             "deviation_risk",
-            when(col("amount_deviation_from_avg") > 2000, 0.3).otherwise(0.0)
+            when(col("amount_deviation_from_avg") > 2000, 0.2).otherwise(0.0)
         )
     )
 
-    # 5. Fraud Score
+    # Fraud Probability (substitui score determinístico)
 
     df_gold = df_gold.withColumn(
-        "fraud_score",
+        "fraud_probability",
         col("amount_risk") +
         col("international_risk") +
         col("category_risk") +
         col("deviation_risk")
     )
 
+    # Label probabilístico (SEM regra fixa)
+
     df_gold = df_gold.withColumn(
         "fraud_flag",
-        when(col("fraud_score") >= 0.7, 1).otherwise(0)
+        when(rand() < col("fraud_probability"), 1).otherwise(0)
     )
 
-    # 6. Customer Metrics (Gold Aggregation)
+    # Customer Metrics (Gold Aggregation)
 
     customer_metrics = (
         df_gold
@@ -116,7 +118,7 @@ def main():
         )
     )
 
-    # 7. Write Gold Layer
+    # Write Gold Layer
   
     df_gold.write.mode("overwrite").parquet(
         "data_lake/gold/transactions"
