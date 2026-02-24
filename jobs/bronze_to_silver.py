@@ -16,16 +16,29 @@ def main():
 
     # transformação dos dados
     df_silver = (
-        df.withColumn("amount", col("amount").cast("double")) \
-        .withColumn("timestamp", to_timestamp(col("timestamp"))) \
-        .withColumn("is_international", col("is_international").cast("boolean"))
+        df.withcolumn("amount", col("amount").cast(DoubleType()))
+        .withColumn("timestamp", to_timestamp(col("timestamp")))
+        .withColumn("is_international", col("is_international").cast(BooleanType()))
     )
 
-    df_silver.write.mode("overwrite").parquet("data_lake/silver/transactions")
+    # filtragem de dados inválidos
+    df_silver = df_silver.filter(
+        col("customer_id").isNotNull() &
+        col("amount").isNotNull() &
+        (col("amount") > 0)
+    )
 
-    print("Silver layer created successfully.")
+    # coluna de particionamento
+    df_silver = df_silver.withColumn("transaction_date", to_date(col("timestamp"))
+    )
 
-    spark.stop()
-
+    # escrita no silver particionando
+    df_silver.write \
+        .mode("overwrite") \
+        .partitionBy("transaction_date") \
+        .parquet("data_lake/silver/transactions")
+    
+    print("Silver layer created successfully")
+    
 if __name__ == "__main__":
     main()
