@@ -9,9 +9,10 @@ from pyspark.sql.functions import (
     abs as spark_abs,
     rand,
     max,
-    to_date
+    to_date,
+    current_timestamp
 )
-
+from pyspark.sql.types import StructType, StructField, StringType, DataType, TimestampType, LongType
 
 def create_spark_session():
     return (
@@ -20,6 +21,41 @@ def create_spark_session():
         .getOrCreate()
     )
 
+METADATA_PATH = "data_lake/metadata/pipeline_control/"
+PIPELINE_NAME = "silver_to_gold"
+
+def get_last_processed_date(spark, METADATA_PATH, PIPELINE_NAME):
+    if os.path.exists(METADATA_PATH):
+        df_meta = spark.read.parquet(METADATA_PATH)
+        df_filtered = df_meta.filter(col("pipeline_name") == PIPELINE_NAME)
+
+        if df_filtered.count() > 0:
+            return df_filtered.select("last_processed_date").collect()[0][0]
+    return None
+
+def update_metadata(
+        spark,
+        metadata_path,
+        pipeline_name,
+        last_processed_date,
+        rows_processed,
+        status
+):
+    new_metadata = spark.createDataFrame(
+        [(pipeline_name, last_processed_date, status, rows_processed)],
+        ["pipeline_name", "last_processed_date", "status", "rows_processed"]
+    ).withColumn("last_run_timestamp", current_timestamp())
+
+    if os.path.exists(metadata_path):
+        existing = spark.read.parquet(metadata_path)
+        updated = (
+            existing.filter(col("pipeline_name") != pipeline_name)
+            .unionByName(new_metadata)
+        )
+    else:
+        updated = new_metadata
+    
+    updated.write.mode("overwrite").parquet(metadata_path)
 
 def main():
     spark = create_spark_session()
@@ -38,22 +74,18 @@ def main():
         )
 
     # INCREMENTAL FILTER
-    if os.path.exists(GOLD_TRANSACTIONS_PATH):
-        df_gold_existing = spark.read.parquet(GOLD_TRANSACTIONS_PATH)
+    last_date = get_last_processed_date(
+        spark,
+        METADATA_PATH,
+        PIPELINE_NAME
+    )
 
-        if "transaction_date" in df_gold_existing.columns:
-            last_date = df_gold_existing.agg(
-                max("transaction_date")
-            ).collect()[0][0]
-
-            if last_date:
-                df_silver = df_silver.filter(
-                    col("transaction_date") > last_date
-                )
-                print(f"Processing only data after {last_date}")
-        else:
-            print("Gold exists but without transaction_date. Running full load.")
-    else:
+    if last_date:
+        df_silver = df_silver.filter(
+            col("transaction_date") > last_date
+        )
+        print(f"Processing data after {last_date}")
+    else: 
         print("First run - full load.")
 
     # Se não houver novos dados
@@ -171,6 +203,20 @@ def main():
         customer_metrics.write.mode("overwrite").parquet(GOLD_METRICS_PATH)
 
     print("Gold layer updated successfully.")
+
+    rows_processed = df_gold.count()
+
+    max_date = df_gold.agg(max("transaction_date")).collect()[0][0]
+
+    update_metadata(
+        spark,
+        METADATA_PATH,
+        PIPELINE_NAME,
+        max_date,
+        rows_processed,
+        "SUCCESS"
+    )
+
     spark.stop()
 
 
